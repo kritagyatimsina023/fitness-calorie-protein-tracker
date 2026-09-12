@@ -1,0 +1,205 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  NON_BINARY
+  PREFER_NOT_TO_SAY
+}
+
+enum ActivityLevel {
+  SEDENTARY
+  LIGHTLY_ACTIVE
+  MODERATELY_ACTIVE
+  VERY_ACTIVE
+  EXTRA_ACTIVE
+}
+
+enum GoalType {
+  LOSE_WEIGHT
+  MAINTAIN_WEIGHT
+  GAIN_WEIGHT
+  BUILD_MUSCLE
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum FoodSource {
+  USDA_FDC
+  FATSECRET
+  CUSTOM
+}
+
+model User {
+  id              String              @id @default(cuid())
+  name            String
+  email           String              @unique
+  passwordHash    String
+  emailVerifiedAt DateTime?
+  profile         UserProfile?
+  goals           NutritionGoal[]
+  meals           Meal[]
+  foodEntries     FoodEntry[]
+  dailyNutrition  DailyNutrition[]
+  sessions        Session[]
+  verificationTokens VerificationToken[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+}
+
+model UserProfile {
+  id            String        @id @default(cuid())
+  userId        String        @unique
+  dateOfBirth   DateTime?
+  gender        Gender?
+  heightCm      Decimal?      @db.Decimal(5, 2)
+  weightKg      Decimal?      @db.Decimal(5, 2)
+  activityLevel ActivityLevel @default(MODERATELY_ACTIVE)
+  goal          GoalType      @default(MAINTAIN_WEIGHT)
+  timezone      String        @default("UTC")
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model NutritionGoal {
+  id                String   @id @default(cuid())
+  userId            String
+  effectiveFrom     DateTime @db.Date
+  calorieTarget     Int
+  proteinTargetGrams Decimal @db.Decimal(6, 2)
+  carbohydrateTargetGrams Decimal? @db.Decimal(6, 2)
+  fatTargetGrams    Decimal? @db.Decimal(6, 2)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([userId, effectiveFrom])
+  @@index([userId, effectiveFrom(sort: Desc)])
+}
+
+model Food {
+  id             String     @id @default(cuid())
+  source         FoodSource
+  externalId     String?
+  name           String
+  brandName      String?
+  servingSize    Decimal    @db.Decimal(8, 2)
+  servingUnit    String
+  nutrition      FoodNutrition?
+  entries        FoodEntry[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@unique([source, externalId])
+  @@index([name])
+  @@index([brandName])
+}
+
+model FoodNutrition {
+  id                 String   @id @default(cuid())
+  foodId             String   @unique
+  caloriesPerServing Int
+  proteinGrams       Decimal  @db.Decimal(7, 2)
+  carbohydrateGrams  Decimal? @db.Decimal(7, 2)
+  fatGrams           Decimal? @db.Decimal(7, 2)
+  fiberGrams         Decimal? @db.Decimal(7, 2)
+  sugarGrams         Decimal? @db.Decimal(7, 2)
+  sodiumMg           Decimal? @db.Decimal(8, 2)
+  food               Food     @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Meal {
+  id        String   @id @default(cuid())
+  userId    String
+  type      MealType
+  name      String?
+  loggedFor DateTime @db.Date
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries   FoodEntry[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, loggedFor, type])
+  @@index([userId, loggedFor(sort: Desc)])
+}
+
+model FoodEntry {
+  id                       String   @id @default(cuid())
+  userId                   String
+  mealId                   String
+  foodId                   String?
+  loggedFor                DateTime @db.Date
+  quantity                 Decimal  @db.Decimal(8, 2)
+  servingSizeSnapshot      Decimal  @db.Decimal(8, 2)
+  servingUnitSnapshot      String
+  foodNameSnapshot         String
+  brandNameSnapshot        String?
+  sourceSnapshot           FoodSource
+  caloriesSnapshot         Int
+  proteinGramsSnapshot     Decimal  @db.Decimal(7, 2)
+  carbohydrateGramsSnapshot Decimal? @db.Decimal(7, 2)
+  fatGramsSnapshot         Decimal? @db.Decimal(7, 2)
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meal                     Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  food                     Food?    @relation(fields: [foodId], references: [id], onDelete: SetNull)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([userId, loggedFor(sort: Desc)])
+  @@index([mealId])
+}
+
+model DailyNutrition {
+  id                String   @id @default(cuid())
+  userId            String
+  loggedFor         DateTime @db.Date
+  totalCalories     Int      @default(0)
+  totalProteinGrams Decimal  @default(0) @db.Decimal(8, 2)
+  totalCarbohydrateGrams Decimal @default(0) @db.Decimal(8, 2)
+  totalFatGrams     Decimal  @default(0) @db.Decimal(8, 2)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([userId, loggedFor])
+  @@index([userId, loggedFor(sort: Desc)])
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+}
+
+// Reserved for the future email-verification flow. No verification behavior is enabled yet.
+model VerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId, expiresAt])
+}
